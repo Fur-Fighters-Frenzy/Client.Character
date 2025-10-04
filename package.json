@@ -1,0 +1,13 @@
+{
+  "name": "validosik.client.character",
+  "displayName": "Physics-Based Character Controllers",
+  "version": "0.0.1",
+  "unity": "6000.0",
+  "description": "Lightweight framework with basic components for physics-driven character control in Unity",
+  "author": { "name": "validosik" },
+  "dependencies": {},
+  "samples": [
+    { "displayName": "Basic Demo", "path": "Samples~/Basic" }
+  ],
+  "keywords": ["character", "controller", "physics", "movement", "player", "unity"]
+}
