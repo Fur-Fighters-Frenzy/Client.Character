@@ -26,6 +26,10 @@ namespace Calidosik.Client.Character.Rider
         [SerializeField] private float _jumpForce = 15f;
 
         [SerializeField] private float _jumpCooldown = 0.2f;
+
+        [Tooltip("How long after leaving ground jump is still allowed")]
+        [SerializeField] private float _jumpAllowedDuration = 0.15f;
+
         [SerializeField] private float _jumpLinearDamping = 0.5f;
         [SerializeField] private float _jumpDampingIgnoreDuration = 0.15f;
         [SerializeField] private float _jumpGravityThreshold = 50f;
@@ -49,6 +53,7 @@ namespace Calidosik.Client.Character.Rider
         [SerializeField] private AnimationCurve _dampingCurve = AnimationCurve.EaseInOut(0, 15f, 1, 0.1f);
 
         private bool _isGrounded;
+        private float _lastGroundedTime;
         private float _lastJumpTime;
         private float _jumpDisableDampingUntil;
         private Vector3 _moveInput;
@@ -97,7 +102,7 @@ namespace Calidosik.Client.Character.Rider
                 return;
             }
 
-            Debug.DrawRay(rayOrigin, rayDirection * hit.distance, Color.yellow);
+            _lastGroundedTime = Time.fixedTime;
 
             var hitBody = hit.rigidbody;
             var velocity = _motorBody.linearVelocity;
@@ -118,6 +123,7 @@ namespace Calidosik.Client.Character.Rider
                 hitBody.AddForceAtPosition(-force, hit.point, ForceMode.Force);
             }
 
+            Debug.DrawRay(rayOrigin, rayDirection * hit.distance, Color.yellow);
             Debug.DrawRay(rayOrigin, Vector3.up * (springForce * 0.01f), Color.red);
         }
 
@@ -162,7 +168,7 @@ namespace Calidosik.Client.Character.Rider
 
         private void ApplyDamping()
         {
-            var disableDamping = Time.time < _jumpDisableDampingUntil;
+            var disableDamping = Time.fixedTime < _jumpDisableDampingUntil;
             if (!_isGrounded || disableDamping)
             {
                 _motorBody.linearDamping = _jumpLinearDamping;
@@ -196,12 +202,18 @@ namespace Calidosik.Client.Character.Rider
 
         private bool CanJump()
         {
-            if (!_isGrounded)
+            if (Time.time - _lastJumpTime < _jumpCooldown)
             {
                 return false;
             }
-
-            if (Time.time - _lastJumpTime < _jumpCooldown)
+            
+            var recentlyGrounded = (Time.time - _lastGroundedTime) <= _jumpAllowedDuration;
+            if (recentlyGrounded)
+            {
+                return true;
+            }
+            
+            if (!_isGrounded)
             {
                 return false;
             }
