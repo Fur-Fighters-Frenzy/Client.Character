@@ -9,45 +9,50 @@ namespace Calidosik.Client.Character.Rider
         [SerializeField] private Rigidbody _motorBody;
 
         [Header("Ride Settings")]
-        [SerializeField] private float _rideHeight = 1f;
+        [SerializeField] private float _rideHeight = 0.5f;
 
-        [SerializeField] private float _rideSpringStrength = 50f;
-        [SerializeField] private float _rideSpringDamper = 5f;
-        [SerializeField] private float _maxSpringForce = 100f;
+        [SerializeField] private float _rideSpringStrength = 2000f;
+        [SerializeField] private float _rideSpringDamper = 0.1f;
+        [SerializeField] private float _maxSpringForce = 300f;
 
         [Header("Movement")]
-        [SerializeField] private float _moveSpeed = 8f;
+        [SerializeField] private float _moveSpeed = 10f;
 
         [SerializeField] private float _maxSpeed = 10f;
         [SerializeField] private float _acceleration = 200f;
-        [SerializeField] private float _airControlMultiplier = 0.2f;
+        [SerializeField] private float _airControlMultiplier = 0.25f;
 
         [Header("Jump")]
-        [SerializeField] private float _jumpForce = 10f;
+        [SerializeField] private float _jumpForce = 15f;
 
         [SerializeField] private float _jumpCooldown = 0.2f;
-        [SerializeField] private float _jumpGravityThreshold = 0.2f;
+        [SerializeField] private float _jumpLinearDamping = 0.5f;
+        [SerializeField] private float _jumpDampingIgnoreDuration = 0.15f;
+        [SerializeField] private float _jumpGravityThreshold = 50f;
+        [SerializeField] private float _fallGravityMultiplier = 6f;
 
         [Header("Raycast")]
-        [SerializeField] private Vector3 _rayOffset = Vector3.zero;
+        [SerializeField] private Vector3 _rayOffset = new Vector3(0, -0.9f, 0);
 
-        [SerializeField] private float _maxRayDistance = 2f;
+        [SerializeField] private float _maxRayDistance = 0.6f;
         [SerializeField] private LayerMask _rayMask = -1;
 
         [Header("Ground Check")]
         [SerializeField] private float _groundCheckDistance = 0.1f;
 
-        [Header("Gravity")]
-        [SerializeField] private float _fallGravityMultiplier = 2f;
+        [Header("Curves")]
+        [Tooltip(
+            "Multiplier applied to acceleration when reversing direction. X=-1..1 (dot product), Y=multiplier 1..N")]
+        [SerializeField] private AnimationCurve _accelDirectionCurve = AnimationCurve.Linear(-1, 5f, 1, 1f);
 
-        [Header("Wall Slide")]
-        [SerializeField] private float _wallCheckDistance = 0.5f;
-
-        [SerializeField] private float _wallSlideThreshold = 0.7f;
+        [Tooltip("Multiplier for Rigidbody.linearDamping based on normalized speed 0..1")]
+        [SerializeField] private AnimationCurve _dampingCurve = AnimationCurve.EaseInOut(0, 15f, 1, 0.1f);
 
         private bool _isGrounded;
         private float _lastJumpTime;
+        private float _jumpDisableDampingUntil;
         private Vector3 _moveInput;
+        private Vector3 _previousInput;
 
         public bool IsGrounded => _isGrounded;
 
@@ -76,7 +81,8 @@ namespace Calidosik.Client.Character.Rider
             ApplyRideForce();
             ApplyMovement();
             ApplyAdditionalGravity();
-            HandleWallSlide();
+
+            ApplyDamping();
         }
 
         private void ApplyRideForce()
@@ -127,6 +133,16 @@ namespace Calidosik.Client.Character.Rider
             var goalVelocity = _moveInput * _moveSpeed;
             goalVelocity.y = velocity.y;
 
+            // Directional reversal boost
+            if (_previousInput.sqrMagnitude > 0.01f)
+            {
+                var dot = Vector3.Dot(_previousInput.normalized, _moveInput.normalized);
+                var dirMult = _accelDirectionCurve.Evaluate(dot);
+                controlMultiplier *= dirMult;
+            }
+
+            _previousInput = _moveInput;
+
             var neededAccel = (goalVelocity - velocity) / Time.fixedDeltaTime;
             neededAccel = Vector3.ClampMagnitude(neededAccel, _acceleration * controlMultiplier);
 
@@ -144,42 +160,21 @@ namespace Calidosik.Client.Character.Rider
             _motorBody.AddForce(gravity, ForceMode.Acceleration);
         }
 
-        private void HandleWallSlide()
+        private void ApplyDamping()
         {
+            var disableDamping = Time.time < _jumpDisableDampingUntil;
+            if (!_isGrounded || disableDamping)
+            {
+                _motorBody.linearDamping = _jumpLinearDamping;
+                return;
+            }
+
+            // Damping modulation
             var velocity = _motorBody.linearVelocity;
-            if (_isGrounded || velocity.sqrMagnitude < 0.1f)
-            {
-                return;
-            }
-
-            var horizontalVelocity = new Vector3(velocity.x, 0, velocity.z);
-            if (horizontalVelocity.sqrMagnitude < 0.1f)
-            {
-                return;
-            }
-
-            var checkDirection = horizontalVelocity.normalized;
-            var rayOrigin = transform.position;
-
-            if (!Physics.Raycast(rayOrigin, checkDirection, out var hit, _wallCheckDistance, _rayMask))
-            {
-                return;
-            }
-
-            var wallDot = Vector3.Dot(hit.normal, Vector3.up);
-            if (Mathf.Abs(wallDot) >= _wallSlideThreshold)
-            {
-                return;
-            }
-
-            var normalVelocity = Vector3.Dot(velocity, hit.normal);
-            if (normalVelocity >= 0)
-            {
-                return;
-            }
-
-            velocity -= hit.normal * normalVelocity;
-            _motorBody.linearVelocity = velocity;
+            var horizontalVel = new Vector3(velocity.x, 0, velocity.z);
+            var speedNorm = Mathf.Clamp01(horizontalVel.magnitude / _maxSpeed);
+            var dampingMult = _dampingCurve.Evaluate(speedNorm);
+            _motorBody.linearDamping = dampingMult; // modulate damping dynamically
         }
 
         public void Move(Vector3 direction)
@@ -196,6 +191,7 @@ namespace Calidosik.Client.Character.Rider
 
             _motorBody.AddForce(Vector3.up * _jumpForce, ForceMode.VelocityChange);
             _lastJumpTime = Time.time;
+            _jumpDisableDampingUntil = _lastJumpTime + _jumpDampingIgnoreDuration;
         }
 
         private bool CanJump()
