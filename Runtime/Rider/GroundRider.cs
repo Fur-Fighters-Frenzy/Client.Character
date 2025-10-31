@@ -71,16 +71,6 @@ namespace Calidosik.Client.Character.Rider
             _motorBody.interpolation = RigidbodyInterpolation.Interpolate;
         }
 
-        private void Update()
-        {
-            Move(new Vector3(Input.GetAxis("Horizontal"), 0, Input.GetAxis("Vertical")));
-
-            if (Input.GetKeyDown(KeyCode.Space))
-            {
-                Jump();
-            }
-        }
-
         private void FixedUpdate()
         {
             ApplyRideForce();
