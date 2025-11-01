@@ -1,9 +1,9 @@
 ﻿using UnityEngine;
 
-namespace Calidosik.Client.Character.Rider
+namespace Validosik.Client.Character.Rider
 {
     [RequireComponent(typeof(Rigidbody))]
-    public class GroundRider : MonoBehaviour
+    public partial class GroundRider : MonoBehaviour
     {
         [Header("Motor Body")]
         [SerializeField] private Rigidbody _motorBody;
@@ -52,6 +52,7 @@ namespace Calidosik.Client.Character.Rider
         [Tooltip("Multiplier for Rigidbody.linearDamping based on normalized speed 0..1")]
         [SerializeField] private AnimationCurve _dampingCurve = AnimationCurve.EaseInOut(0, 15f, 1, 0.1f);
 
+        private Transform _tr;
         private bool _isGrounded;
         private float _lastGroundedTime;
         private float _lastJumpTime;
@@ -63,6 +64,8 @@ namespace Calidosik.Client.Character.Rider
 
         private void Awake()
         {
+            _tr = transform;
+
             if (_motorBody == null)
             {
                 _motorBody = GetComponent<Rigidbody>();
@@ -82,8 +85,8 @@ namespace Calidosik.Client.Character.Rider
 
         private void ApplyRideForce()
         {
-            var rayOrigin = transform.TransformPoint(_rayOffset);
-            var rayDirection = transform.TransformDirection(Vector3.down);
+            var rayOrigin = _tr.TransformPoint(_rayOffset);
+            var rayDirection = _tr.TransformDirection(Vector3.down);
 
             _isGrounded = Physics.Raycast(rayOrigin, rayDirection, out var hit,
                 _maxRayDistance, _rayMask);
@@ -196,19 +199,19 @@ namespace Calidosik.Client.Character.Rider
             {
                 return false;
             }
-            
+
             var recentlyGrounded = (Time.time - _lastGroundedTime) <= _jumpAllowedDuration;
             if (recentlyGrounded)
             {
                 return true;
             }
-            
+
             if (!_isGrounded)
             {
                 return false;
             }
 
-            var rayOrigin = transform.TransformPoint(_rayOffset);
+            var rayOrigin = _tr.TransformPoint(_rayOffset);
             return Physics.Raycast(rayOrigin, Vector3.down, _rideHeight + _groundCheckDistance, _rayMask);
         }
     }
